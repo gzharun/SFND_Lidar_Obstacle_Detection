@@ -34,6 +34,16 @@ std::vector<Car> initHighway(bool renderScene, pcl::visualization::PCLVisualizer
     return cars;
 }
 
+void cityBlock(pcl::visualization::PCLVisualizer::Ptr& viewer)
+{
+  // ----------------------------------------------------
+  // -----Open 3D viewer and display City Block     -----
+  // ----------------------------------------------------
+
+  ProcessPointClouds<pcl::PointXYZI>* pointProcessorI = new ProcessPointClouds<pcl::PointXYZI>();
+  pcl::PointCloud<pcl::PointXYZI>::Ptr inputCloud = pointProcessorI->loadPcd("../src/sensors/data/pcd/data_1/0000000000.pcd");
+  renderPointCloud(viewer, inputCloud, "inputCloud");
+}
 
 void simpleHighway(pcl::visualization::PCLVisualizer::Ptr& viewer)
 {
@@ -42,13 +52,40 @@ void simpleHighway(pcl::visualization::PCLVisualizer::Ptr& viewer)
     // ----------------------------------------------------
     
     // RENDER OPTIONS
-    bool renderScene = true;
+    bool renderScene = false;
     std::vector<Car> cars = initHighway(renderScene, viewer);
     
-    // TODO:: Create lidar sensor 
+    // TODO:: Create lidar sensor
+    auto lidar = new Lidar(cars, 0.0);
+    //renderRays(viewer, lidar->position, lidar->scan());
+    //renderPointCloud(viewer, lidar->scan(), "PCD");
 
     // TODO:: Create point processor
-  
+    ProcessPointClouds<pcl::PointXYZ> proc{};
+    auto clouds = proc.SegmentPlane(lidar->scan(), 100, 0.2);
+    renderPointCloud(viewer, clouds.first, "ObstCloud", Color(1, 0, 0));
+    renderPointCloud(viewer, clouds.second, "RoadCloud");
+
+    std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> cloudClusters = proc.Clustering(clouds.first, 2.0, 3, 100);
+
+    int clusterId = 0;
+    std::vector<Color> colors = {Color(1,0,0), Color(0,1,0), Color(0,0,1)};
+
+    for(pcl::PointCloud<pcl::PointXYZ>::Ptr cluster : cloudClusters)
+    {
+        std::cout << "cluster size ";
+        proc.numPoints(cluster);
+        renderPointCloud(viewer, cluster, "obstCloud"+std::to_string(clusterId), colors[clusterId]);
+        ++clusterId;
+
+        pcl::PointXYZ origMinPoint, origMaxPoint;
+        // Calculate original bbox params, keep z coordinate
+        pcl::getMinMax3D(*cluster, origMinPoint, origMaxPoint);
+      
+        //Box box = proc.BoundingBox(cluster);
+        BoxQ box = proc.BoundingBoxQ(cluster);
+        renderBox(viewer,box,clusterId);
+    }
 }
 
 
@@ -83,7 +120,8 @@ int main (int argc, char** argv)
     pcl::visualization::PCLVisualizer::Ptr viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
     CameraAngle setAngle = XY;
     initCamera(setAngle, viewer);
-    simpleHighway(viewer);
+    //simpleHighway(viewer);
+    cityBlock(viewer);
 
     while (!viewer->wasStopped ())
     {
