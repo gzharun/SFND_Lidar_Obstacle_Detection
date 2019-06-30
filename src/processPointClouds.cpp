@@ -23,17 +23,39 @@ void ProcessPointClouds<PointT>::numPoints(typename pcl::PointCloud<PointT>::Ptr
 template<typename PointT>
 typename pcl::PointCloud<PointT>::Ptr ProcessPointClouds<PointT>::FilterCloud(typename pcl::PointCloud<PointT>::Ptr cloud, float filterRes, Eigen::Vector4f minPoint, Eigen::Vector4f maxPoint)
 {
-
-    // Time segmentation process
+    // Time filtering process
     auto startTime = std::chrono::steady_clock::now();
+    typename pcl::PointCloud<PointT>::Ptr filteredCloud{new pcl::PointCloud<PointT>};
 
-    // TODO:: Fill in the function to do voxel grid point reduction and region based filtering
+    // Filter point cloud
+    pcl::VoxelGrid<PointT> sor;
+    sor.setInputCloud (cloud);
+    sor.setLeafSize (filterRes, filterRes, filterRes);
+    sor.filter (*filteredCloud);
+
+    // Crop the region of interest
+    pcl::CropBox<PointT> roi;
+    roi.setInputCloud(filteredCloud);
+    roi.setMin(minPoint);
+    roi.setMax(maxPoint);
+    roi.filter(*filteredCloud);
+
+    // Remove ego car points
+    const Eigen::Vector4f minPointCar = {-1.5f, -1.5f, -1.0f, 1.0f};
+    const Eigen::Vector4f maxPointCar = {2.7f, 1.5f, -0.4f, 1.0f};
+    pcl::PointIndices::Ptr carPoints (new pcl::PointIndices());
+    pcl::CropBox<PointT> roof;
+    roof.setInputCloud(filteredCloud);
+    roof.setMin(minPointCar);
+    roof.setMax(maxPointCar);
+    roof.setNegative(true);
+    roof.filter(*filteredCloud);
 
     auto endTime = std::chrono::steady_clock::now();
     auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
     std::cout << "filtering took " << elapsedTime.count() << " milliseconds" << std::endl;
 
-    return cloud;
+    return filteredCloud;
 
 }
 
@@ -42,19 +64,19 @@ template<typename PointT>
 std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::SeparateClouds(pcl::PointIndices::Ptr inliers, typename pcl::PointCloud<PointT>::Ptr cloud) 
 {
     // TODO: Create two new point clouds, one cloud with obstacles and other with segmented plane
-    pcl::ExtractIndices<pcl::PointXYZ> extract;
     typename pcl::PointCloud<PointT>::Ptr plainCloud{new pcl::PointCloud<PointT>};
     typename pcl::PointCloud<PointT>::Ptr obstCloud{new pcl::PointCloud<PointT>};
 
     // Extract the inliers
-        extract.setInputCloud (cloud);
-        extract.setIndices (inliers);
-        extract.setNegative (false);
-        extract.filter (*plainCloud);
+    pcl::ExtractIndices<pcl::PointXYZ> extract;
+    extract.setInputCloud (cloud);
+    extract.setIndices (inliers);
+    extract.setNegative (false);
+    extract.filter (*plainCloud);
 
-        // Create the filtering object
-        extract.setNegative (true);
-        extract.filter (*obstCloud);
+    // Create the filtering object
+    extract.setNegative (true);
+    extract.filter (*obstCloud);
 
     std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> segResult(obstCloud, plainCloud);
     return segResult;

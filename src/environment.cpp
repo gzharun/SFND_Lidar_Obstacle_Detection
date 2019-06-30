@@ -36,13 +36,19 @@ std::vector<Car> initHighway(bool renderScene, pcl::visualization::PCLVisualizer
 
 void cityBlock(pcl::visualization::PCLVisualizer::Ptr& viewer)
 {
-  // ----------------------------------------------------
-  // -----Open 3D viewer and display City Block     -----
-  // ----------------------------------------------------
+    // ----------------------------------------------------
+    // -----Open 3D viewer and display City Block     -----
+    // ----------------------------------------------------
 
-  ProcessPointClouds<pcl::PointXYZI>* pointProcessorI = new ProcessPointClouds<pcl::PointXYZI>();
-  pcl::PointCloud<pcl::PointXYZI>::Ptr inputCloud = pointProcessorI->loadPcd("../src/sensors/data/pcd/data_1/0000000000.pcd");
-  renderPointCloud(viewer, inputCloud, "inputCloud");
+    ProcessPointClouds<pcl::PointXYZI>* pointProcessorI = new ProcessPointClouds<pcl::PointXYZI>();
+    pcl::PointCloud<pcl::PointXYZI>::Ptr inputCloud = pointProcessorI->loadPcd("../src/sensors/data/pcd/data_1/0000000000.pcd");
+    constexpr float filterRes = 0.2f;
+    const Eigen::Vector4f minPoint = {-10.0f, -6.0f, -2.0f, 1};
+    const Eigen::Vector4f maxPoint = {20.0f, 8.0f, 2.0f, 1};
+    pcl::PointCloud<pcl::PointXYZI>::Ptr filterCloud = pointProcessorI->FilterCloud(inputCloud, filterRes, minPoint, maxPoint);
+
+    renderPointCloud(viewer, filterCloud, "filterCloud");
+    //renderPointCloud(viewer, inputCloud, "inputCloud");
 }
 
 void simpleHighway(pcl::visualization::PCLVisualizer::Ptr& viewer)
