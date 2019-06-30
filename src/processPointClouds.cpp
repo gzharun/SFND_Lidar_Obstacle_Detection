@@ -17,29 +17,6 @@ namespace {
             proximity(points, found[i], processed, tree, distanceTol, cluster);
         }
     }
-
-    template<typename PointT>
-    void buildKDTree(KdTree<PointT>* tree, const std::vector<PointT>& points, const std::vector<int>& indices, int st, int end)
-    {
-        if (end == st)
-            return;
-
-        int pos = (st + end) / 2;
-        tree->insert(points[indices[pos]], indices[pos]);
-
-        buildKDTree(tree, points, indices, st, pos);
-        buildKDTree(tree, points, indices, pos + 1, end);
-    }
-
-    template<typename PointT>
-    size_t sqrDistToCent3D(const PointT& a, const Eigen::Vector4f& cent) {
-        size_t res = 0;
-        res += (a.x - cent[0]) * (a.x - cent[0]);
-        res += (a.y - cent[1]) * (a.y - cent[1]);
-        res += (a.z - cent[2]) * (a.z - cent[2]);
-
-        return res;
-    }
 }
 
 template<typename PointT>
@@ -50,22 +27,8 @@ std::vector<typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::C
     std::vector<PointT> points{cloud->points.begin(), cloud->points.end()};
 	const size_t n = points.size();
 
-    /*
-    Eigen::Vector4f centroid;
-    pcl::compute3DCentroid(*cloud, centroid);
-
-    std::vector<int> sortedIndices(n);
-    std::iota(sortedIndices.begin(), sortedIndices.end(), 0);
-    std::sort(sortedIndices.begin(), sortedIndices.end(),
-             [&points, &centroid](int a, int b)
-             {
-                 return sqrDistToCent3D(points[a], centroid) < sqrDistToCent3D(points[b], centroid);
-             });*/
     auto tree = new KdTree<PointT>();
-    //buildKDTree<PointT>(tree, points, sortedIndices, 0, n);
-    for (int i = 0; i < n; ++i) {
-        tree->insert(points[i], i);
-    }
+    tree->build(cloud);
 
     std::vector<pcl::PointIndices> clusters;
 	std::vector<uint8_t> processed(points.size(), 0);
@@ -299,7 +262,6 @@ std::vector<typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::C
 template<typename PointT>
 Box ProcessPointClouds<PointT>::BoundingBox(typename pcl::PointCloud<PointT>::Ptr cluster)
 {
-
     // Find bounding box for one of the clusters
     PointT minPoint, maxPoint;
     pcl::getMinMax3D(*cluster, minPoint, maxPoint);
