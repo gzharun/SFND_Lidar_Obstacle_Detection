@@ -8,6 +8,33 @@
 // using templates for processPointClouds so also include .cpp to help linker
 #include "processPointClouds.cpp"
 
+namespace {
+    template<typename PointT>
+    float iouXY(typename pcl::PointCloud<PointT>::Ptr a, typename pcl::PointCloud<PointT>::Ptr b) {
+        PointT minPoint1, maxPoint1;
+        pcl::getMinMax3D(*a, minPoint1, maxPoint1);
+        PointT minPoint2, maxPoint2;
+        pcl::getMinMax3D(*b, minPoint2, maxPoint2);
+
+        float iou = 0.0f;
+        float minX = std::max(minPoint1.x, minPoint2.x);
+        float minY = std::max(minPoint1.y, minPoint2.y);
+        float maxX = std::min(maxPoint1.x, maxPoint2.x);
+        float maxY = std::min(maxPoint1.y, maxPoint2.y);
+
+        if (minX >= maxX || minY >= maxY) {
+            return 0.0f;
+        }
+
+        float inter = (maxX - minX) * (maxY - minY);
+        float un = (maxPoint1.x - minPoint1.x) * (maxPoint1.y - minPoint1.y) +
+                   (maxPoint2.x - minPoint2.x) * (maxPoint2.y - minPoint2.y) -
+                   inter;
+
+        return inter / un;        
+    }
+}
+
 std::vector<Car> initHighway(bool renderScene, pcl::visualization::PCLVisualizer::Ptr& viewer)
 {
 
