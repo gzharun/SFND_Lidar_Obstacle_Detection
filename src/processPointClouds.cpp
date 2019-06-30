@@ -5,16 +5,16 @@
 
 namespace {
     template<typename PointT>
-    void proximity(const std::vector<PointT>& points, int idx, std::vector<uint8_t>& processed,
+    void proximity(typename pcl::PointCloud<PointT>::Ptr cloud, int idx, std::vector<uint8_t>& processed,
                    KdTree<PointT>* tree, float distanceTol, pcl::PointIndices& cluster)
     {
         processed[idx] = 1;
         cluster.indices.push_back(idx);
-        std::vector<int> found = tree->search(points[idx], distanceTol);
+        std::vector<int> found = tree->search(cloud->points[idx], distanceTol);
         for (size_t i = 0; i < found.size(); ++i) {
             if (processed[found[i]])
                 continue;
-            proximity(points, found[i], processed, tree, distanceTol, cluster);
+            proximity(cloud, found[i], processed, tree, distanceTol, cluster);
         }
     }
 }
@@ -24,23 +24,22 @@ std::vector<typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::C
 {
     // Time clustering process
     auto startTime = std::chrono::steady_clock::now();
-    std::vector<PointT> points{cloud->points.begin(), cloud->points.end()};
-	const size_t n = points.size();
 
     auto tree = new KdTree<PointT>();
     tree->build(cloud);
 
     std::vector<pcl::PointIndices> clusters;
-	std::vector<uint8_t> processed(points.size(), 0);
+    const size_t n = cloud->points.size();
+	std::vector<uint8_t> processed(n, 0);
 	for (size_t i = 0; i < n; ++i)
 	{
 		if (processed[i])
 			continue;
 
 		pcl::PointIndices cluster;
-		proximity(points, i, processed, tree, distanceTol, cluster);
+		proximity(cloud, i, processed, tree, distanceTol, cluster);
         if (cluster.indices.size() >= minSize && cluster.indices.size() <= maxSize)
-		clusters.emplace_back(std::move(cluster));
+		    clusters.emplace_back(std::move(cluster));
 	}
 
     std::vector<typename pcl::PointCloud<PointT>::Ptr> cloudClusters;
