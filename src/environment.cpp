@@ -40,15 +40,33 @@ void cityBlock(pcl::visualization::PCLVisualizer::Ptr& viewer)
     // -----Open 3D viewer and display City Block     -----
     // ----------------------------------------------------
 
-    ProcessPointClouds<pcl::PointXYZI>* pointProcessorI = new ProcessPointClouds<pcl::PointXYZI>();
-    pcl::PointCloud<pcl::PointXYZI>::Ptr inputCloud = pointProcessorI->loadPcd("../src/sensors/data/pcd/data_1/0000000000.pcd");
+    ProcessPointClouds<pcl::PointXYZI> pointProcessorI;
+    pcl::PointCloud<pcl::PointXYZI>::Ptr inputCloud = pointProcessorI.loadPcd("../src/sensors/data/pcd/data_1/0000000000.pcd");
     constexpr float filterRes = 0.2f;
     const Eigen::Vector4f minPoint = {-10.0f, -6.0f, -2.0f, 1};
-    const Eigen::Vector4f maxPoint = {20.0f, 8.0f, 2.0f, 1};
-    pcl::PointCloud<pcl::PointXYZI>::Ptr filterCloud = pointProcessorI->FilterCloud(inputCloud, filterRes, minPoint, maxPoint);
+    const Eigen::Vector4f maxPoint = {25.0f, 8.0f, 2.0f, 1};
+    pcl::PointCloud<pcl::PointXYZI>::Ptr filterCloud = pointProcessorI.FilterCloud(inputCloud, filterRes, minPoint, maxPoint);
 
-    renderPointCloud(viewer, filterCloud, "filterCloud");
-    //renderPointCloud(viewer, inputCloud, "inputCloud");
+    auto clouds = pointProcessorI.SegmentPlane(filterCloud, 100, 0.25);
+    //renderPointCloud(viewer, clouds.first, "ObstCloud", Color(1, 0, 0));
+    renderPointCloud(viewer, clouds.second, "RoadCloud", Color(1, 1, 1));
+
+    std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> cloudClusters = pointProcessorI.Clustering(clouds.first, 0.5, 10, 1000);
+
+    int clusterId = 0;
+    std::vector<Color> colors = {Color(1,0,0), Color(0,1,0), Color(0,0,1), Color(1,1,0), Color(1,0,1), Color(0,1,1)};
+
+    for(pcl::PointCloud<pcl::PointXYZI>::Ptr cluster : cloudClusters)
+    {
+        std::cout << "cluster size ";
+        pointProcessorI.numPoints(cluster);
+        renderPointCloud(viewer, cluster, "obstCloud"+std::to_string(clusterId), colors[clusterId]);
+        ++clusterId;
+      
+        //Box box = pointProcessorI.BoundingBox(cluster);
+        BoxQ box = pointProcessorI.BoundingBoxQ(cluster);
+        renderBox(viewer, box, clusterId);
+    }
 }
 
 void simpleHighway(pcl::visualization::PCLVisualizer::Ptr& viewer)
