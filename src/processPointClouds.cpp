@@ -1,7 +1,106 @@
 // PCL lib Functions for processing point clouds 
 
 #include "processPointClouds.h"
+#include "kdtree.h"
 
+namespace {
+    template<typename PointT>
+    void proximity(const std::vector<PointT>& points, int idx, std::vector<uint8_t>& processed,
+                   KdTree<PointT>* tree, float distanceTol, pcl::PointIndices& cluster)
+    {
+        processed[idx] = 1;
+        cluster.indices.push_back(idx);
+        std::vector<int> found = tree->search(points[idx], distanceTol);
+        for (size_t i = 0; i < found.size(); ++i) {
+            if (processed[found[i]])
+                continue;
+            proximity(points, found[i], processed, tree, distanceTol, cluster);
+        }
+    }
+
+    template<typename PointT>
+    void buildKDTree(KdTree<PointT>* tree, const std::vector<PointT>& points, const std::vector<int>& indices, int st, int end)
+    {
+        if (end == st)
+            return;
+
+        int pos = (st + end) / 2;
+        tree->insert(points[indices[pos]], indices[pos]);
+
+        buildKDTree(tree, points, indices, st, pos);
+        buildKDTree(tree, points, indices, pos + 1, end);
+    }
+
+    template<typename PointT>
+    size_t sqrDistToCent3D(const PointT& a, const Eigen::Vector4f& cent) {
+        size_t res = 0;
+        res += (a.x - cent[0]) * (a.x - cent[0]);
+        res += (a.y - cent[1]) * (a.y - cent[1]);
+        res += (a.z - cent[2]) * (a.z - cent[2]);
+
+        return res;
+    }
+}
+
+template<typename PointT>
+std::vector<typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::Clustering(typename pcl::PointCloud<PointT>::Ptr cloud, float distanceTol, int minSize, int maxSize)
+{
+    // Time clustering process
+    auto startTime = std::chrono::steady_clock::now();
+    std::vector<PointT> points{cloud->points.begin(), cloud->points.end()};
+	const size_t n = points.size();
+
+    /*
+    Eigen::Vector4f centroid;
+    pcl::compute3DCentroid(*cloud, centroid);
+
+    std::vector<int> sortedIndices(n);
+    std::iota(sortedIndices.begin(), sortedIndices.end(), 0);
+    std::sort(sortedIndices.begin(), sortedIndices.end(),
+             [&points, &centroid](int a, int b)
+             {
+                 return sqrDistToCent3D(points[a], centroid) < sqrDistToCent3D(points[b], centroid);
+             });*/
+    auto tree = new KdTree<PointT>();
+    //buildKDTree<PointT>(tree, points, sortedIndices, 0, n);
+    for (int i = 0; i < n; ++i) {
+        tree->insert(points[i], i);
+    }
+
+    std::vector<pcl::PointIndices> clusters;
+	std::vector<uint8_t> processed(points.size(), 0);
+	for (size_t i = 0; i < n; ++i)
+	{
+		if (processed[i])
+			continue;
+
+		pcl::PointIndices cluster;
+		proximity(points, i, processed, tree, distanceTol, cluster);
+        if (cluster.indices.size() >= minSize && cluster.indices.size() <= maxSize)
+		clusters.emplace_back(std::move(cluster));
+	}
+
+    std::vector<typename pcl::PointCloud<PointT>::Ptr> cloudClusters;
+    for (auto it = clusters.begin(); it != clusters.end(); ++it)
+    {
+        typename pcl::PointCloud<PointT>::Ptr cloudCluster (new pcl::PointCloud<PointT>);
+        for (auto pit = it->indices.begin(); pit != it->indices.end(); ++pit)
+        {
+            cloudCluster->points.push_back(cloud->points[*pit]);
+        }
+        cloudCluster->width = cloudCluster->points.size();
+        cloudCluster->height = 1;
+        cloudCluster->is_dense = true;
+
+        cloudClusters.emplace_back(std::move(cloudCluster));
+    }
+
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    std::cout << "clustering took " << elapsedTime.count() << " milliseconds and found " << clusters.size() << " clusters" << std::endl;
+
+    return cloudClusters;
+}
 
 //constructor:
 template<typename PointT>
@@ -117,21 +216,21 @@ std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT
         const auto & point2 = cloud->points[p2];
         const auto & point3 = cloud->points[p3];
 
-		const double x1 = point1.x, x2 = point2.x, x3 = point3.x;
-		const double y1 = point1.y, y2 = point2.y, y3 = point3.y;
-		const double z1 = point1.z, z2 = point2.z, z3 = point3.z;
+		const float x1 = point1.x, x2 = point2.x, x3 = point3.x;
+		const float y1 = point1.y, y2 = point2.y, y3 = point3.y;
+		const float z1 = point1.z, z2 = point2.z, z3 = point3.z;
 
-		const double a = (y2 - y1)*(z3 - z1) - (z2 - z1)*(y3 - y1);
-		const double b = (z2 - z1)*(x3 - x1) - (x2 - x1)*(z3 - z1);
-		const double c = (x2 - x1)*(y3 - y1) - (y2 - y1)*(x3 - x1);
-		const double d = -(a*x1 + b*y1 + c*z1);
+		const float a = (y2 - y1)*(z3 - z1) - (z2 - z1)*(y3 - y1);
+		const float b = (z2 - z1)*(x3 - x1) - (x2 - x1)*(z3 - z1);
+		const float c = (x2 - x1)*(y3 - y1) - (y2 - y1)*(x3 - x1);
+		const float d = -(a*x1 + b*y1 + c*z1);
 
-		const double norm = std::sqrt(a*a + b*b + c*c);
+		const float norm = std::sqrt(a*a + b*b + c*c);
         //std::cout << "Norm: " << norm << std::endl;
 		tmp.clear();
 		for (size_t j = 0; j < cloud->points.size(); ++j) {
 			const auto& point = cloud->points[j];
-			const double dist = std::abs(a*point.x + b*point.y + c*point.z + d) / norm;
+			const float dist = std::abs(a*point.x + b*point.y + c*point.z + d) / norm;
         
 			if (dist <= distanceThreshold) {
                 //std::cout << "Dist: " << dist << std::endl;
@@ -156,7 +255,7 @@ std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT
 
 
 template<typename PointT>
-std::vector<typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::Clustering(typename pcl::PointCloud<PointT>::Ptr cloud, float clusterTolerance, int minSize, int maxSize)
+std::vector<typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::ClusteringPCL(typename pcl::PointCloud<PointT>::Ptr cloud, float clusterTolerance, int minSize, int maxSize)
 {
     // Time clustering process
     auto startTime = std::chrono::steady_clock::now();
