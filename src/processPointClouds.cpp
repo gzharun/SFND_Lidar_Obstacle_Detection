@@ -292,22 +292,30 @@ BoxQ ProcessPointClouds<PointT>::BoundingBoxQ(typename pcl::PointCloud<PointT>::
     // We want to project e1 and e2 on XY plane, so if one of them haz max Z we should swap it with e3
     Eigen::Vector3f::Index idx;
     eigenVectorsPCA.row(2).cwiseAbs().maxCoeff(&idx);
-    auto tmp = eigenVectorsPCA.col(idx);
     eigenVectorsPCA.col(idx) = eigenVectorsPCA.col(2);
-    eigenVectorsPCA.col(2) = tmp;
-
-    // We need to normalize e1 and e2 vecotors
-    // puting their z coordinates equal to 0
-    // This will give us the projection to of PCA vectors to the original XY plane
-    // After that e3 vector is calculated as X product of prjected and normalize e1 and e2
-    // This is required to correctly determine z vector direction
     // making e1, e2, e3 a right handed vector system
-    eigenVectorsPCA.row(2) << 0, 0, 0;
-    eigenVectorsPCA.col(0).normalize();
-    eigenVectorsPCA.col(1).normalize();
     eigenVectorsPCA.col(2) = eigenVectorsPCA.col(0).cross(eigenVectorsPCA.col(1));
-    eigenVectorsPCA.col(2).normalize();
-
+    
+    // We need to rotate basis so that e3 become collinear with z
+    // x axis rotation
+    const float y = eigenVectorsPCA.col(2)[1];
+    const float z1 = eigenVectorsPCA.col(2)[2];
+    const float norm1 = std::sqrt(y * y + z1 * z1);
+    Eigen::Matrix3f xAxisRot;
+    xAxisRot << 1, 0, 0,
+                0, z1/norm1, -y/norm1,
+                0, y/norm1, z1/norm1;
+    eigenVectorsPCA = xAxisRot * eigenVectorsPCA;
+    // y axis rotation
+    const float x = eigenVectorsPCA.col(2)[0];
+    const float z2 = eigenVectorsPCA.col(2)[2];
+    const float norm2 = std::sqrt(x * x + z2 * z2);
+    Eigen::Matrix3f yAxisRot;
+    yAxisRot << z2/norm2, 0, -x/norm2,
+                0, 1, 0,
+                x/norm2, 0, z2/norm2;
+    eigenVectorsPCA = yAxisRot * eigenVectorsPCA;
+ 
     // Form transformation matrix.
     Eigen::Matrix4f projectionTransform(Eigen::Matrix4f::Identity());
     projectionTransform.block<3,3>(0,0) = eigenVectorsPCA.transpose();
