@@ -27,10 +27,15 @@ struct KdTree
 	{}
 
 	void build(typename pcl::PointCloud<PointT>::Ptr cloud)
-	{
+	{	
+		std::srand(std::time(nullptr));
 		const size_t n = cloud->points.size();
 		std::vector<int> indices(n, 0);
-    	std::iota(indices.begin(), indices.end(), 0);
+		std::iota(indices.begin(), indices.end(), 0);
+		// shuffle
+		for (int i = 0; i < n; ++i) {
+			std::swap(indices[i], indices[i + rand() % (n - i)]);
+		}
 		build(root, cloud, indices, 0, n, 0);
 	}
 
