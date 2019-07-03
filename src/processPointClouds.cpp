@@ -284,23 +284,21 @@ BoxQ ProcessPointClouds<PointT>::BoundingBoxQ(typename pcl::PointCloud<PointT>::
     pcl::compute3DCentroid(*cluster, pcaCentroid);
     Eigen::Matrix3f covariance;
     computeCovarianceMatrixNormalized(*cluster, pcaCentroid, covariance);
-    covariance.col(2) << 0, 0, 1;
-    covariance.row(2) << 0, 0, 1;
+    //covariance.col(2) << 0, 0, 1;
+    //covariance.row(2) << 0, 0, 1;
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigen_solver(covariance, Eigen::ComputeEigenvectors);
     Eigen::Matrix3f eigenVectorsPCA = eigen_solver.eigenvectors();
-    
+
+    // Eperimental code *****************
     // Ignore z rotation.
     // First rearrange eigen vector matrix
     // e3 vector will be a vector with max Z coordinate
     // We want to project e1 and e2 on XY plane, so if one of them haz max Z we should swap it with e3
     Eigen::Vector3f::Index idx;
     eigenVectorsPCA.row(2).cwiseAbs().maxCoeff(&idx);
+    Eigen::Vector3f tmp = eigenVectorsPCA.col(idx);
     eigenVectorsPCA.col(idx) = eigenVectorsPCA.col(2);
-    // making e1, e2, e3 a right handed vector system
-    eigenVectorsPCA.col(2) = eigenVectorsPCA.col(0).cross(eigenVectorsPCA.col(1));
-
-    // Experimental code
-    /*
+    eigenVectorsPCA.col(2) = tmp;
     // We need to rotate basis so that e3 become collinear with z
     // x axis rotation
     const float y = eigenVectorsPCA.col(2)[1];
@@ -320,8 +318,8 @@ BoxQ ProcessPointClouds<PointT>::BoundingBoxQ(typename pcl::PointCloud<PointT>::
                 0, 1, 0,
                 x/norm2, 0, z2/norm2;
     eigenVectorsPCA = yAxisRot * eigenVectorsPCA;
- 
-    std::cout << "Matrix: " << eigenVectorsPCA << std::endl;*/
+    eigenVectorsPCA.col(2) = eigenVectorsPCA.col(0).cross(eigenVectorsPCA.col(1));
+    // ***********************************************
 
     // Form transformation matrix.
     Eigen::Matrix4f projectionTransform(Eigen::Matrix4f::Identity());
