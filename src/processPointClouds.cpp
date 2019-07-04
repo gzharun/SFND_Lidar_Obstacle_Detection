@@ -279,55 +279,62 @@ Box ProcessPointClouds<PointT>::BoundingBox(typename pcl::PointCloud<PointT>::Pt
 template<typename PointT>
 BoxQ ProcessPointClouds<PointT>::BoundingBoxQ(typename pcl::PointCloud<PointT>::Ptr cluster)
 {
+    const bool EXPERIMENTAL_BASIS_ROTATION = false;
     // PCA
     Eigen::Vector4f pcaCentroid;
     pcl::compute3DCentroid(*cluster, pcaCentroid);
     Eigen::Matrix3f covariance;
     computeCovarianceMatrixNormalized(*cluster, pcaCentroid, covariance);
-    //covariance.col(2) << 0, 0, 1;
-    //covariance.row(2) << 0, 0, 1;
+    if (!EXPERIMENTAL_BASIS_ROTATION)
+    {
+        covariance.col(2) << 0, 0, 1;
+        covariance.row(2) << 0, 0, 1;
+    }
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigen_solver(covariance, Eigen::ComputeEigenvectors);
     Eigen::Matrix3f eigenVectorsPCA = eigen_solver.eigenvectors();
 
-    // ****************** Experimental code *****************
-    // Let's experiment with basis rotation, setting z covariance of covarience matrix to 0 and z var to 1 is trivial
-    // How to ignore z rotation.
-    // First rearrange eigen vector matrix
-    // e3 vector will be a vector with max Z coordinate
-    // We want to project e1 and e2 on XY plane, so if one of them has max Z we should swap it with e3
-    // However we should avoid flipping ove XY plane.
-    // Thus if e3 z coordinate is negative e3 will be multiplied by -1, this is easier to code I suppose.
-    // We will restore the basis right hand property after rotation.
-    Eigen::Vector3f::Index idx;
-    eigenVectorsPCA.row(2).cwiseAbs().maxCoeff(&idx);
-    Eigen::Vector3f tmp = eigenVectorsPCA.col(idx);
-    eigenVectorsPCA.col(idx) = eigenVectorsPCA.col(2);
-    eigenVectorsPCA.col(2) = tmp;
-    if (eigenVectorsPCA.row(2)[2] < 0)
-        eigenVectorsPCA.row(2) = eigenVectorsPCA.row(2) * (-1);
+    if (EXPERIMENTAL_BASIS_ROTATION)
+    {
+        // ****************** Experimental code *****************
+        // Let's experiment with basis rotation, setting z covariance of covarience matrix to 0 and z var to 1 is trivial
+        // How to ignore z rotation.
+        // First rearrange eigen vector matrix
+        // e3 vector will be a vector with max Z coordinate
+        // We want to project e1 and e2 on XY plane, so if one of them has max Z we should swap it with e3
+        // However we should avoid flipping ove XY plane.
+        // Thus if e3 z coordinate is negative e3 will be multiplied by -1, this is easier to code I suppose.
+        // We will restore the basis right hand property after rotation.
+        Eigen::Vector3f::Index idx;
+        eigenVectorsPCA.row(2).cwiseAbs().maxCoeff(&idx);
+        Eigen::Vector3f tmp = eigenVectorsPCA.col(idx);
+        eigenVectorsPCA.col(idx) = eigenVectorsPCA.col(2);
+        eigenVectorsPCA.col(2) = tmp;
+        if (eigenVectorsPCA.row(2)[2] < 0)
+            eigenVectorsPCA.row(2) = eigenVectorsPCA.row(2) * (-1);
 
-    // We need to rotate basis so that e3 become collinear with z
-    // x axis rotation
-    const float y = eigenVectorsPCA.col(2)[1];
-    const float z1 = eigenVectorsPCA.col(2)[2];
-    const float norm1 = std::sqrt(y * y + z1 * z1);
-    Eigen::Matrix3f xAxisRot;
-    xAxisRot << 1, 0, 0,
-                0, z1/norm1, -y/norm1,
-                0, y/norm1, z1/norm1;
-    eigenVectorsPCA = xAxisRot * eigenVectorsPCA;
-    // y axis rotation
-    const float x = eigenVectorsPCA.col(2)[0];
-    const float z2 = eigenVectorsPCA.col(2)[2];
-    const float norm2 = std::sqrt(x * x + z2 * z2);
-    Eigen::Matrix3f yAxisRot;
-    yAxisRot << z2/norm2, 0, -x/norm2,
-                0, 1, 0,
-                x/norm2, 0, z2/norm2;
-    eigenVectorsPCA = yAxisRot * eigenVectorsPCA;
+        // We need to rotate basis so that e3 become collinear with z
+        // x axis rotation
+        const float y = eigenVectorsPCA.col(2)[1];
+        const float z1 = eigenVectorsPCA.col(2)[2];
+        const float norm1 = std::sqrt(y * y + z1 * z1);
+        Eigen::Matrix3f xAxisRot;
+        xAxisRot << 1, 0, 0,
+                    0, z1/norm1, -y/norm1,
+                    0, y/norm1, z1/norm1;
+        eigenVectorsPCA = xAxisRot * eigenVectorsPCA;
+        // y axis rotation
+        const float x = eigenVectorsPCA.col(2)[0];
+        const float z2 = eigenVectorsPCA.col(2)[2];
+        const float norm2 = std::sqrt(x * x + z2 * z2);
+        Eigen::Matrix3f yAxisRot;
+        yAxisRot << z2/norm2, 0, -x/norm2,
+                    0, 1, 0,
+                    x/norm2, 0, z2/norm2;
+        eigenVectorsPCA = yAxisRot * eigenVectorsPCA;
+        // ******************** End of experimental code *****************
+    }
     // Restore right hand property
     eigenVectorsPCA.col(2) = eigenVectorsPCA.col(0).cross(eigenVectorsPCA.col(1));
-    // ******************** End of experimental code *****************
 
     // Form transformation matrix.
     Eigen::Matrix4f projectionTransform(Eigen::Matrix4f::Identity());
