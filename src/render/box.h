@@ -9,6 +9,11 @@ struct BoxQ
 	float cube_length;
     float cube_width;
     float cube_height;
+
+	float volume()
+	{
+		return cube_length * cube_width * cube_height;
+	}
 };
 struct Box
 {
@@ -18,5 +23,10 @@ struct Box
 	float x_max;
 	float y_max;
 	float z_max;
+
+	float volume()
+	{
+		return (x_max - x_min) * (y_max - y_min) * (z_max - z_min);
+	}
 };
 #endif
